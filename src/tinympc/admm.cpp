@@ -305,7 +305,7 @@ void update_linear_cost(TinySolver *solver)
 
 /**
  * Check for termination condition by evaluating whether the largest absolute
- * primal and dual residuals for states and inputs are below threhold.
+ * primal and dual residuals for states and inputs are below threshold.
 */
 bool termination_condition(TinySolver *solver)
 {
@@ -321,7 +321,17 @@ bool termination_condition(TinySolver *solver)
             solver->work->dual_residual_state < solver->settings->abs_dua_tol &&
             solver->work->dual_residual_input < solver->settings->abs_dua_tol)
         {
-            return true;                 
+            // Also require TV linear constraints to have converged (||u - zlnew_tv|| and
+            // ||x - vlnew_tv|| measure ADMM primal residual for the linear constraint split).
+            if (solver->settings->en_tv_input_linear &&
+                (solver->work->u - solver->work->zlnew_tv).cwiseAbs().maxCoeff() >= solver->settings->abs_pri_tol) {
+                return false;
+            }
+            if (solver->settings->en_tv_state_linear &&
+                (solver->work->x - solver->work->vlnew_tv).cwiseAbs().maxCoeff() >= solver->settings->abs_pri_tol) {
+                return false;
+            }
+            return true;
         }
     }
     return false;
@@ -435,8 +445,6 @@ int solve(TinySolver *solver)
             solver->solution->solved = 1;
             solver->solution->x = solver->work->vnew;
             solver->solution->u = solver->work->znew;
-
-            std::cout << "Solver converged in " << solver->work->iter << " iterations" << std::endl;
 
             return 0;
         }
