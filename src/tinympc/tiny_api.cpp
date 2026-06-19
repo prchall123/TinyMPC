@@ -300,6 +300,15 @@ int tiny_set_tv_linear_constraints(TinySolver* solver,
     solver->work->tv_Alin_u = tv_Alin_u;
     solver->work->tv_blin_u = tv_blin_u;
 
+    // Reset TV duals whenever constraint directions change; stale duals contaminate
+    // zlnew_tv even at small rho because solution->u returns zlnew_tv directly.
+    if (num_tv_input_linear > 0) {
+        solver->work->yl_tv.setZero();
+    }
+    if (num_tv_state_linear > 0) {
+        solver->work->gl_tv.setZero();
+    }
+
     return 0;
 }
 

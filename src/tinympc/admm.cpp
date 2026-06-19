@@ -264,7 +264,9 @@ void update_linear_cost(TinySolver *solver)
 
     // Update state cost terms
     solver->work->q = -(solver->work->Xref.array().colwise() * solver->work->Q.array());
-    (solver->work->q).noalias() -= solver->cache->rho * (solver->work->vnew - solver->work->g);
+    if (solver->settings->en_state_bound) {
+        (solver->work->q).noalias() -= solver->cache->rho * (solver->work->vnew - solver->work->g);
+    }
     if (solver->settings->en_state_soc && solver->work->numStateCones > 0) {
         (solver->work->q).noalias() -= solver->cache->rho * (solver->work->vcnew - solver->work->gc);
     }
@@ -277,7 +279,9 @@ void update_linear_cost(TinySolver *solver)
 
     // Update input cost terms
     solver->work->r = -(solver->work->Uref.array().colwise() * solver->work->R.array());
-    (solver->work->r).noalias() -= solver->cache->rho * (solver->work->znew - solver->work->y);
+    if (solver->settings->en_input_bound) {
+        (solver->work->r).noalias() -= solver->cache->rho * (solver->work->znew - solver->work->y);
+    }
     if (solver->settings->en_input_soc && solver->work->numInputCones > 0) {
         (solver->work->r).noalias() -= solver->cache->rho * (solver->work->zcnew - solver->work->yc);
     }
@@ -290,7 +294,9 @@ void update_linear_cost(TinySolver *solver)
 
     // Update terminal cost
     solver->work->p.col(solver->work->N - 1) = -(solver->work->Xref.col(solver->work->N - 1).transpose().lazyProduct(solver->cache->Pinf));
-    (solver->work->p.col(solver->work->N - 1)).noalias() -= solver->cache->rho * (solver->work->vnew.col(solver->work->N - 1) - solver->work->g.col(solver->work->N - 1));
+    if (solver->settings->en_state_bound) {
+        (solver->work->p.col(solver->work->N - 1)).noalias() -= solver->cache->rho * (solver->work->vnew.col(solver->work->N - 1) - solver->work->g.col(solver->work->N - 1));
+    }
 
     if (solver->settings->en_state_soc && solver->work->numStateCones > 0) {
         solver->work->p.col(solver->work->N - 1) -= solver->cache->rho * (solver->work->vcnew.col(solver->work->N - 1) - solver->work->gc.col(solver->work->N - 1));
@@ -380,7 +386,7 @@ int solve(TinySolver *solver)
     if (solver->settings->en_tv_state_linear) {
         solver->work->vlnew_tv = solver->work->x;
     }
-    
+
     if (solver->settings->en_tv_input_linear) {
         solver->work->zlnew_tv = solver->work->u;
     }
@@ -444,7 +450,13 @@ int solve(TinySolver *solver)
             solver->solution->iter = solver->work->iter;
             solver->solution->solved = 1;
             solver->solution->x = solver->work->vnew;
-            solver->solution->u = solver->work->znew;
+            // Return TV-linear-constrained trajectory when enabled (always feasible);
+            // fall back to raw primal u otherwise.
+            if (solver->settings->en_tv_input_linear) {
+                solver->solution->u = solver->work->zlnew_tv;
+            } else {
+                solver->solution->u = solver->work->znew;
+            }
 
             return 0;
         }
@@ -458,7 +470,11 @@ int solve(TinySolver *solver)
     solver->solution->iter = solver->work->iter;
     solver->solution->solved = 0;
     solver->solution->x = solver->work->vnew;
-    solver->solution->u = solver->work->znew;
+    if (solver->settings->en_tv_input_linear) {
+        solver->solution->u = solver->work->zlnew_tv;
+    } else {
+        solver->solution->u = solver->work->znew;
+    }
     return 1;
 }
 
